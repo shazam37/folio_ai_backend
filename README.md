@@ -1,319 +1,317 @@
-Portfolio Optimizer GenAI (LangGraph + FastAPI)
-A hackathon-ready backend that analyzes an investor’s portfolio and suggests a practical, constraint-aware rebalancing plan using a hybrid of deterministic optimization and AI reasoning. Built with FastAPI and LangGraph to keep the workflow transparent, auditable, and easy to integrate with a Next.js frontend.
+# Portfolio Optimizer GenAI (LangGraph + FastAPI)
+
+A hackathon-ready backend that analyzes an investor’s portfolio and proposes a practical, constraint-aware rebalancing plan using a combination of deterministic optimization and AI reasoning. Built with FastAPI and LangGraph to keep the workflow transparent, auditable, and easy to integrate with a Next.js frontend.
 
 This project is designed so that non-finance folks can understand what’s happening at every step, and developers can extend or swap components as needed.
 
-What this app does
-Accepts a user’s current portfolio (tickers and quantities), cash, and preferences (risk tolerance, time horizon, constraints).
+***
 
-Agent 1 (Researcher):
+## Table of Contents
 
-Gathers basic company info and qualitative trend signals from the web/data tools.
+- Introduction
+- Features
+- How It Works (High-Level)
+- Architecture
+- Data Models
+- Project Structure
+- Setup and Run
+- API Usage
+- Example Payload
+- Example Output (What to Expect)
+- Implementation Details
+- Extending the App
+- Limitations
+- FAQ
+- Contributing
+- License
 
-Builds a clear, human-readable analysis of the current portfolio (sector exposure, concentration, rough risk proxy).
+***
 
-Agent 2 (Optimizer):
+## Introduction
 
-Checks the analysis, applies deterministic rules (caps, diversification, optional cash buffer), and proposes a rebalancing plan.
+Portfolio Optimizer GenAI helps turn a user’s current investments and preferences into a clearer, more diversified allocation with simple explanations. It does not try to “beat the market.” Instead, it focuses on:
+- Avoiding over-concentration
+- Respecting user constraints (e.g., single stock cap)
+- Producing actionable buy/sell/hold suggestions
+- Explaining the reasoning in plain English
 
-Uses AI to write a concise rationale in plain English without inventing numbers.
+***
 
-Outputs include:
+## Features
 
-Before/after portfolio metrics (e.g., concentration index)
+- Accepts a user’s current portfolio (tickers and quantities), cash, and preferences (risk tolerance, time horizon, constraints)
+- Agent 1 (Researcher): gathers basic company context and qualitative trend signals from data tools, then summarizes the current portfolio
+- Agent 2 (Optimizer): checks the analysis, applies deterministic rules (caps, diversification, optional cash bucket), and proposes a rebalancing plan
+- AI-generated rationale: concise, human-readable explanation without inventing numbers
+- Returns before/after metrics, target weights, buy/sell/hold actions, estimated trade values, and logs
 
-Target weights, suggested buy/sell/hold actions, and estimated trade values
+***
 
-Explanations in simple language so users understand the “why,” not just the “what”
+## How It Works (High-Level)
 
-Why this matters (in plain English)
-Diversification reduces the chance that one stock can sink the whole portfolio.
+1) Input: Positions, cash, and preferences (risk tolerance, time horizon, constraints)
+2) Research: Collects company info (sector, proxy risk), and qualitative trend summaries
+3) Analysis: Computes portfolio metrics (value, weights, sector mix, concentration)
+4) Optimization: Enforces constraints (e.g., single-name cap), creates target weights, uses CASH for leftover allocation when needed
+5) Explanation: AI produces a short rationale grounded in the actual numbers and constraints
+6) Output: Metrics, plan, actions, and logs presented in structured JSON
 
-Position caps (e.g., 20% per stock) avoid overconfidence in a single name.
+***
 
-Clear actions and estimates help turn analysis into decisions.
+## Architecture
 
-Explanations avoid “black box” results, helping build trust.
+- Backend: FastAPI
+- Workflow Orchestration: LangGraph
+- Endpoints:
+  - POST /optimize/run → start a run
+  - GET /optimize/status/{run_id} → check status
+  - GET /optimize/result/{run_id} → fetch results
+- Tools: Swappable data sources (stubbed locally for hackathon); easy to replace with real market/news/fundamentals providers
+- Deterministic Optimizer:
+  - Single-name caps (e.g., max 20% per stock)
+  - Optional sector caps (e.g., Tech ≤ 35%)
+  - Minimum position size (avoid tiny allocations)
+  - Optional max number of positions
+  - CASH bucket for leftover weight (keeps allocations at 100%)
+- Observability: Step-by-step logs and structured outputs for easy review
 
-This app doesn’t promise market-beating results; it aims to create a safer, more aligned portfolio based on the user’s preferences and constraints.
+***
 
-Architecture overview
-FastAPI backend exposing simple endpoints:
+## Data Models
 
-POST /optimize/run → start a run
-
-GET /optimize/status/{run_id} → check status
-
-GET /optimize/result/{run_id} → fetch results
-
-LangGraph orchestrates the workflow:
-
-validate_input → fetch_market_snapshot → analyze_portfolio → optimize_portfolio → finalize
-
-Tools gather company info, prices, and qualitative trend flags. During hackathon, these use local stubs to avoid brittle dependencies; you can easily swap in real providers later.
-
-Deterministic optimizer enforces:
-
-Single-name caps (e.g., max 20% per stock)
-
-Optional sector caps (e.g., Tech ≤ 35%)
-
-Minimum position sizes to avoid tiny, noisy positions
-
-Optional cap on number of holdings
-
-Cash bucket used when caps force unallocated weight (keeps total at 100%)
-
-Observability:
-
-Each run captures step-by-step logs and serialized outputs to make reviews and debugging easy.
-
-Key design choices
-Deterministic first, AI second: Numbers are produced by code; AI explains and critiques but never invents figures.
-
-Transparent state: Inputs, intermediate analyses, and outputs are all returned in structured JSON.
-
-Simple to extend: Swap stub data tools for real APIs; replace the basic optimizer with a fancier one without changing the overall flow.
-
-Hackathon-friendly: Local storage (in-memory), minimal configuration, straightforward API for a Next.js frontend.
-
-Data models (simplified)
 PortfolioInput
-
-positions: list of {ticker, quantity, avg_cost?}
-
-cash
-
-preferences: {risk_tolerance: low/medium/high, horizon_months, single_name_cap, target_return?, sector_caps?}
-
-constraints: {max_positions?, min_position_size?, rebalance_freq?, exclude_tickers?}
-
-user_profile: {country?, currency?, allow_derivatives?}
+- positions: list of {ticker, quantity, avg_cost?}
+- cash: number
+- preferences:
+  - risk_tolerance: low | medium | high
+  - horizon_months: integer
+  - single_name_cap: number (e.g., 0.20 for 20%)
+  - target_return?: number
+  - sector_caps?: { sector_name: cap_fraction }
+- constraints:
+  - max_positions?: integer
+  - min_position_size?: number (e.g., 0.01 for 1%)
+  - rebalance_freq?: quarterly | semiannual | annual
+  - exclude_tickers?: [string]
+- user_profile:
+  - country?: string
+  - currency?: string (default USD)
+  - allow_derivatives?: boolean
 
 AnalysisBundle
-
-portfolio_metrics: total_value, weights, sector_weights, concentration_index (HHI), estimated beta proxy
-
-company_digests: short summaries per holding
-
-market_context: neutral, qualitative summary
-
-issues_found: e.g., high concentration, above-cap positions
+- portfolio_metrics:
+  - total_value: number
+  - weights: { ticker: fraction }
+  - sector_weights: { sector: fraction }
+  - concentration_index: number (Herfindahl-Hirschman Index; lower is more diversified)
+  - est_portfolio_beta?: number (simple proxy)
+- company_digests: { ticker: short_summary }
+- market_context: short qualitative summary
+- issues_found: [string]
 
 OptimizationPlan
+- target_weights: { ticker_or_CASH: fraction }
+- actions: [{ ticker, action: buy|sell|hold, target_weight, est_trade_value }]
+- rationale: string (concise explanation grounded in the actual plan)
+- risk_impact: { hhi_before, hhi_after, beta_before, beta_after, ... }
+- alternatives: { conservative: {...}, growth_tilt: {...} }
 
-target_weights: final allocation per ticker (and CASH)
+***
 
-actions: buy/sell/hold with estimated trade values
+## Project Structure
 
-rationale: AI-written explanation grounded in the actual plan
+- app/
+  - graph.py → LangGraph definition (agents, tools, nodes, compiled graph)
+  - api.py → FastAPI application (endpoints only; imports compiled graph)
+- README.md → this file
 
-risk_impact: before/after concentration and proxies
+Feel free to reorganize; ensure the FastAPI module can import the compiled graph.
 
-alternatives: conservative and growth-tilt variants
+***
 
-Project structure (suggested)
-app/
+## Setup and Run
 
-graph.py → LangGraph definition (agents, tools, nodes, compiled graph)
+Requirements
+- Python 3.10+
+- LLM provider key set as an environment variable (e.g., OPENAI_API_KEY)
 
-api.py → FastAPI app (endpoints only; imports compiled graph)
+Install
+- pip install fastapi uvicorn langgraph langchain langchain-openai pydantic
 
-README.md → this file
+Environment
+- export OPENAI_API_KEY=your_key_here
 
-You can rename or reorganize as needed; ensure the FastAPI module can import the compiled graph.
+Start the server
+- uvicorn app.api:app --reload
 
-Setup
-Requirements:
+If your module path differs, update the uvicorn path accordingly.
 
-Python 3.10+
+***
 
-An API key for your LLM provider (e.g., OpenAI) stored as an environment variable (OPENAI_API_KEY)
+## API Usage
 
-Install dependencies:
+Start a run
+- POST /optimize/run with a JSON payload (see “Example Payload”)
+- Response: {"run_id": "...", "state": "completed" | "running" | "failed"}
 
-pip install fastapi uvicorn langgraph langchain langchain-openai pydantic
+Check status
+- GET /optimize/status/{run_id}
 
-Environment:
+Fetch results
+- GET /optimize/result/{run_id}
+- Returns: analysis_bundle, optimization_plan, logs, version
 
-export OPENAI_API_KEY=your_key_here
+Testing options
+- Swagger UI: visit /docs in your browser after starting the server
+- curl:
+  - curl -X POST http://127.0.0.1:8000/optimize/run -H "Content-Type: application/json" -d '{...}'
+- HTTPie:
+  - http POST :8000/optimize/run positions:='[{"ticker":"AAPL","quantity":10},{"ticker":"MSFT","quantity":8}]' cash:=500 preferences:='{"risk_tolerance":"medium","horizon_months":24,"single_name_cap":0.2}' constraints:='{"max_positions":25,"min_position_size":0.01}' user_profile:='{"currency":"USD","allow_derivatives":false}'
 
-Start the server:
+***
 
-uvicorn app.api:app --reload
+## Example Payload
 
-If module paths differ, adjust the uvicorn path accordingly.
-
-API usage
-Example JSON payload:
 {
-"positions": [
-{"ticker": "AAPL", "quantity": 10},
-{"ticker": "MSFT", "quantity": 8}
-],
-"cash": 500.0,
-"preferences": {
-"risk_tolerance": "medium",
-"horizon_months": 24,
-"single_name_cap": 0.2
-},
-"constraints": {
-"max_positions": 25,
-"min_position_size": 0.01
-},
-"user_profile": {
-"currency": "USD",
-"allow_derivatives": false
+  "positions": [
+    { "ticker": "AAPL", "quantity": 10 },
+    { "ticker": "MSFT", "quantity": 8 }
+  ],
+  "cash": 500.0,
+  "preferences": {
+    "risk_tolerance": "medium",
+    "horizon_months": 24,
+    "single_name_cap": 0.2
+  },
+  "constraints": {
+    "max_positions": 25,
+    "min_position_size": 0.01
+  },
+  "user_profile": {
+    "currency": "USD",
+    "allow_derivatives": false
+  }
 }
-}
 
-Endpoints:
+***
+
+## Example Output (What to Expect)
+
+- A structured JSON including:
+  - analysis_bundle:
+    - portfolio_metrics: total_value, weights, sector_weights, concentration_index, est_portfolio_beta
+    - company_digests: short summaries per ticker
+    - market_context: concise qualitative overview
+    - issues_found: e.g., “High concentration”
+  - optimization_plan:
+    - target_weights: allocation for each ticker, plus CASH if unallocated
+    - actions: buy/sell/hold with estimated trade values
+    - rationale: plain-English explanation aligned with actual numbers
+    - risk_impact: before/after indicators (e.g., HHI)
+    - alternatives: conservative and growth-tilt variants
+  - logs: step-by-step trace of the run
+  - version: backend version
 
-Start a run:
+Note: In development mode, market data/fundamentals/news may be stubbed. Replace with real providers for meaningful results.
 
-POST /optimize/run with the payload above
+***
 
-Returns: {"run_id": "...", "state": "completed" | "running" | "failed"}
+## Implementation Details
 
-Check status:
+- Input validation:
+  - Ensures at least one position
+  - Verifies positive investment horizon
+  - Flags excluded tickers if present
 
-GET /optimize/status/{run_id}
+- Data collection (development):
+  - Prices/fundamentals/trends use stubbed values to keep the system stable
+  - Easily swap in real providers later
 
-Get results:
+- Analysis:
+  - Computes portfolio value and weights
+  - Builds sector weights from tool data
+  - Calculates concentration via HHI (sum of squared weights, excluding CASH)
+  - Estimates a simple beta proxy when available
 
-GET /optimize/result/{run_id}
+- Optimization:
+  - Enforces single-name caps
+  - Supports optional sector caps
+  - Applies minimum position size to avoid tiny allocations
+  - Caps number of positions to limit turnover
+  - Uses a CASH bucket to keep total allocation at 100% when caps reduce exposure
+  - Generates buy/sell/hold actions with estimated trade values
+  - Produces alternatives (conservative, growth-tilt) for quick what-if choices
 
-Returns analysis_bundle, optimization_plan, logs, and version
+- Explanations:
+  - AI generates a short rationale based on the actual output (no invented numbers)
+  - Language is concise and user-friendly
 
-Testing options:
+***
 
-Built-in Swagger UI at /docs
+## Extending the App
 
-curl:
+Replace stub tools with real data
+- Market data: Polygon.io, Alpha Vantage, Finnhub, Yahoo Finance
+- News: NewsAPI or financial-news providers
+- Fundamentals: sector, beta, valuation fields from a fundamentals API
 
-curl -X POST http://127.0.0.1:8000/optimize/run -H "Content-Type: application/json" -d '{...}'
+Improve the optimizer
+- Pull historical returns and estimate covariance (e.g., numpy/pandas)
+- Solve constrained mean-variance with a quadratic program (e.g., cvxpy)
+- Penalize turnover and incorporate transaction cost estimates
+- Add tax-aware logic to avoid unnecessary realization of gains
 
-HTTPie:
+Compliance and risk filters
+- Exclude low-liquidity or penny stocks
+- Allow user-defined exclusions (e.g., ESG screens)
+- Add simple rule checks (e.g., sanctions lists) as a safety filter
 
-http POST :8000/optimize/run positions:='[{"ticker":"AAPL","quantity":10},{"ticker":"MSFT","quantity":8}]' cash:=500 preferences:='{"risk_tolerance":"medium","horizon_months":24,"single_name_cap":0.2}' constraints:='{"max_positions":25,"min_position_size":0.01}' user_profile:='{"currency":"USD","allow_derivatives":false}'
+Scale and persist
+- Replace in-memory run registry with SQLite/Postgres
+- Store runs/results/logs for user history
+- Add background tasks/queues for long-running jobs
+- Integrate tracing/metrics for observability
 
-Implementation details
-Input validation:
+Frontend integration (Next.js)
+- Submit POST /optimize/run from an API route or server action
+- Poll GET /optimize/status/{run_id} until completed
+- Render GET /optimize/result/{run_id}: show metrics, plan, rationale
+- Visualize before/after weights and actions with estimated trade values
 
-Enforces at least one position
+***
 
-Checks time horizon positive
+## Limitations
 
-Flags excluded tickers if present
+- Not investment advice; intended for educational and technical demonstration
+- Development mode uses stubbed data; connect real data sources for production
+- Risk proxies are simplified; real portfolios need robust covariance models and scenario analysis
+- Taxes, fees, and user-specific constraints are simplified and can materially affect outcomes
 
-Data collection (dev mode):
+***
 
-Prices default to a neutral stub value
+## FAQ
 
-Fundamentals and trend flags are placeholders; swap with real providers when ready
+- Why is CASH included in target weights?
+  - When caps prevent allocating 100% to current holdings, the remainder is placed in CASH to avoid forced over-concentration. Users can later allocate CASH to diversified funds or additional names.
 
-Analysis:
+- I set a single-name cap of 20%. Why would a stock exceed that?
+  - The optimizer enforces caps before normalization; if you see otherwise, ensure you’re on the latest version and that your inputs were parsed correctly.
 
-Calculates portfolio value and weights
+- Can I add custom rules (e.g., “no fossil fuels”, “cap small-cap exposure”)?
+  - Yes. Add checks in the analysis and constraints in the optimizer, and clearly surface infeasible constraints in the response.
 
-Sector weights based on tool data
+***
 
-Concentration via HHI (sum of squared weights; lower is more diversified)
+## Contributing
 
-Basic risk proxy via weighted betas if available
+- Fork the repository and open a PR with a clear description
+- Keep the workflow transparent: avoid hiding logic in long prompts or opaque functions
+- Add structured logs for new steps and preserve output formats for the frontend
 
-Optimization:
+***
 
-Enforces single-name cap across holdings
+## License
 
-Optional sector caps (if provided)
+MIT License
 
-Minimum position size filter
-
-Cap on number of positions (keeps turnover reasonable)
-
-Cash bucket absorbs leftover weight when caps force down allocations
-
-Buy/sell/hold actions include estimated trade values for clarity
-
-Alternatives provide quick “what-if” choices
-
-Explanations:
-
-AI rewrites and tightens rationale using the actual plan and issues found
-
-No invented numbers; qualitative guidance only
-
-Extending the app
-Replace stub tools with real data:
-
-Market data: Polygon.io, Alpha Vantage, Finnhub, Yahoo Finance
-
-News: NewsAPI or financial-news sources
-
-Fundamentals: providers with sector, beta, and valuation fields
-
-Improve the optimizer:
-
-Add historical returns and compute covariance (e.g., numpy/pandas)
-
-Use a quadratic program (e.g., cvxpy) for mean-variance with constraints
-
-Penalize turnover and include transaction cost estimates
-
-Add a tax-aware mode to avoid selling high-gain positions where possible
-
-Compliance/risk filters:
-
-Exclude penny stocks, very low liquidity names, or restricted tickers
-
-Add ESG or custom filters as user preferences
-
-Scalability and persistence:
-
-Swap in-memory run registry for SQLite/Postgres
-
-Persist runs, results, and logs for user histories
-
-Use background tasks or a queue for long-running jobs
-
-Add tracing/metrics for observability
-
-Frontend integration (Next.js):
-
-Submit POST /optimize/run from an API route or server action
-
-Poll GET /optimize/status/{run_id} until completed
-
-Render GET /optimize/result/{run_id}: metrics, plan, and rationale
-
-Visualize before/after weights and show actions with trade values
-
-Limitations
-Not investment advice. This is a technical demonstration for educational purposes.
-
-Stubbed data during development means numbers are placeholders; connect real data sources for meaningful results.
-
-Risk proxies are simplified (e.g., HHI, basic beta). Real-world risk needs a proper covariance model and scenario analysis.
-
-Taxes, fees, and user-specific constraints can materially change optimal actions and are simplified here.
-
-FAQ
-Why does the plan sometimes recommend “CASH”?
-
-When caps prevent allocating 100% to current holdings, the remainder is left as cash. This is safer than forcing over-concentration. You can later allocate that cash to diversified funds or new names.
-
-I set a single-name cap of 20%. Why did a stock show more than 20%?
-
-That’s a bug the optimizer guards against. Ensure caps are enforced before normalization, and any excess is redistributed or moved to CASH. The provided code includes this logic.
-
-Can I add my own constraints (e.g., “no fossil fuels”, “max 10% small-cap”)?
-
-Yes. Add checks in the analysis and constraints in the optimizer, then surface any infeasibility clearly in the response.
-
-Contributing
-Fork and open a PR with a clear description of what you changed and why.
-
-Keep the flow transparent: avoid burying important logic in prompts or opaque functions.
-
-Add logs for new steps and preserve structured outputs for the UI.
+This software is provided “as is,” without warranty of any kind. It is not financial advice and should not be used as the sole basis for investment decisions.
