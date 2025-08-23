@@ -1,4 +1,4 @@
-# Portfolio Optimizer GenAI (LangGraph + FastAPI)
+# Folio AI: AI Portfolio Optimizer
 
 A hackathon-ready backend that analyzes an investor’s portfolio and proposes a practical, constraint-aware rebalancing plan using a combination of deterministic optimization and AI reasoning. Built with FastAPI and LangGraph to keep the workflow transparent, auditable, and easy to integrate with a Next.js frontend.
 
