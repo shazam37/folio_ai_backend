@@ -17,8 +17,6 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langchain.tools import tool
 from schema import *
 
-google_api_key = "AIzaSyCt--XXbfRUxWzgiEt56_2mQY3NjoPl-BU"
-tavily_api_key = "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"
 
 os.environ["GOOGLE_API_KEY"] = google_api_key
 os.environ["TAVILY_API_KEY"] = tavily_api_key
