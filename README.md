@@ -136,13 +136,13 @@ Requirements
 - LLM provider key set as an environment variable (e.g., OPENAI_API_KEY)
 
 Install
-- pip install fastapi uvicorn langgraph langchain langchain-openai pydantic
+- pip install fastapi uvicorn langgraph langchain langchain-openai pydantic langchain-google-genai langchain-tavily 
 
 Environment
 - export OPENAI_API_KEY=your_key_here
 
 Start the server
-- uvicorn app.api:app --reload
+- uvicorn main:app --reload
 
 If your module path differs, update the uvicorn path accordingly.
 
