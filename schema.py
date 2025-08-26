@@ -31,6 +31,7 @@ class UserProfile(BaseModel):
     allow_derivatives: Optional[bool] = False
 
 class PortfolioInput(BaseModel):
+    id: str
     positions: List[Position] = Field(..., min_items=1)
     cash: float = 0.0
     preferences: Preferences

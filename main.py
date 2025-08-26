@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Optional, List, Literal, TypedDict
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, conlist
 
 # Import the compiled LangGraph from your LangGraph module
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field, conlist
 # Example: from app.graph import graph
 from agents import graph  # <-- update path if needed
 from schema import *
+
 
 
 # ---------------- In-memory run registry (for hackathon/dev) ----------------
@@ -29,12 +31,20 @@ app = FastAPI(
 )
 
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # or ["*"] during dev
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.post("/optimize/run")
 def run_optimize(payload: PortfolioInput):
     """
     Kick off an optimization run. Returns a run_id that the frontend can poll.
     """
-    run_id = str(uuid.uuid4())
+    run_id = payload.id
     initial_state: GraphState = {
         "input": payload,
         "market_snapshot": None,
